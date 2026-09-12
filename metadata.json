@@ -1,0 +1,7 @@
+{
+  "name": "Lumenhance",
+  "description": "On-device photo and video enhancement bringing desktop-grade sharpening, denoising, super-resolution, and restoration to Android with an Apple-inspired design.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+

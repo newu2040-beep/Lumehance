@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+
+    <!-- Circular Base -->
+    <path
+        android:pathData="M24,24m-22,0a22,22 0,1,1 44,0a22,22 0,1,1 -44,0">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="0"
+                android:startY="0"
+                android:endX="48"
+                android:endY="48"
+                android:type="linear">
+                <item android:color="#0F172A" android:offset="0.0" />
+                <item android:color="#020617" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Glowing Outer Circular Rim -->
+    <path
+        android:pathData="M24,24m-21,0a21,21 0,1,1 42,0a21,21 0,1,1 -42,0"
+        android:strokeWidth="1.8">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:startX="3"
+                android:startY="3"
+                android:endX="45"
+                android:endY="45"
+                android:type="linear">
+                <item android:color="#00F0FF" android:offset="0.0" />
+                <item android:color="#8B5CF6" android:offset="0.5" />
+                <item android:color="#EC4899" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Concentric Lens Guide -->
+    <path
+        android:pathData="M24,24m-15,0a15,15 0,1,1 30,0a15,15 0,1,1 -30,0"
+        android:strokeColor="#1E293B"
+        android:strokeWidth="1.0" />
+
+    <!-- Inner Iris Ring -->
+    <path
+        android:pathData="M24,24m-11,0a11,11 0,1,1 22,0a11,11 0,1,1 -22,0"
+        android:strokeWidth="1.2">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:startX="13"
+                android:startY="13"
+                android:endX="35"
+                android:endY="35"
+                android:type="linear">
+                <item android:color="#00E5FF" android:offset="0.0" />
+                <item android:color="#6366F1" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- AI Brilliance Super-Resolution Star -->
+    <path
+        android:pathData="M24,14 Q24,24 34,24 Q24,24 24,34 Q24,24 14,24 Q24,24 24,14 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="14"
+                android:startY="14"
+                android:endX="34"
+                android:endY="34"
+                android:type="linear">
+                <item android:color="#FFFFFF" android:offset="0.0" />
+                <item android:color="#38BDF8" android:offset="0.5" />
+                <item android:color="#00E5FF" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Core Dot -->
+    <path
+        android:pathData="M24,24m-2,0a2,2 0,1,1 4,0a2,2 0,1,1 -4,0"
+        android:fillColor="#FFFFFF" />
+
+    <!-- Sparkle accent -->
+    <path
+        android:pathData="M33,13 Q33,15 35,15 Q33,15 33,17 Q33,15 31,15 Q33,15 33,13 Z"
+        android:fillColor="#00F0FF" />
+
+</vector>
