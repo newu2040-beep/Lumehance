@@ -16,6 +16,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.InputStream
 import java.util.Locale
+import kotlin.math.roundToInt
 
 data class VideoMetadata(
     val durationMs: Long,
@@ -175,7 +176,7 @@ object MediaHelper {
     suspend fun extractVideoFrames(
         context: Context,
         uri: Uri,
-        targetFrameCount: Int = 24,
+        targetFrameCount: Int = 30,
         maxDimension: Int = 1080
     ): VideoMetadata? = withContext(Dispatchers.IO) {
         val retriever = MediaMetadataRetriever()
@@ -193,6 +194,9 @@ object MediaHelper {
             val rotationStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)
             val rotationDegrees = rotationStr?.toIntOrNull() ?: 0
 
+            val fpsStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_CAPTURE_FRAMERATE)
+            val detectedFps = fpsStr?.toFloatOrNull()?.roundToInt()?.coerceIn(15, 60) ?: 30
+
             val hasAudioStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_AUDIO)
             val hasAudio = hasAudioStr != null && (hasAudioStr.equals("yes", ignoreCase = true) || hasAudioStr == "1")
 
@@ -200,19 +204,24 @@ object MediaHelper {
             val naturalW = if (isRotated90or270) rawH else rawW
             val naturalH = if (isRotated90or270) rawW else rawH
 
-            // Calculate scaled target dimensions preserving aspect ratio
+            // Calculate frame count based on actual video duration to preserve smooth playback and timing
+            val durationSec = durationMs / 1000f
+            val countToExtract = ((durationSec * detectedFps).toInt().coerceIn(16, 120))
+
+            // Calculate target dimensions maintaining exact natural aspect ratio
             val maxEdge = maxOf(naturalW, naturalH)
             val scale = if (maxEdge > maxDimension) maxDimension.toFloat() / maxEdge else 1.0f
             val targetW = (naturalW * scale).toInt().coerceAtLeast(160)
             val targetH = (naturalH * scale).toInt().coerceAtLeast(160)
 
             val frames = mutableListOf<Bitmap>()
-            val intervalUs = if (targetFrameCount > 1) {
-                ((durationMs.coerceAtLeast(500L) * 1000L) / (targetFrameCount - 1))
+            val durationUs = (durationMs.coerceAtLeast(500L) * 1000L)
+            val intervalUs = if (countToExtract > 1) {
+                durationUs / (countToExtract - 1)
             } else 1000L
 
-            for (i in 0 until targetFrameCount) {
-                val timeUs = (i * intervalUs).coerceIn(0L, (durationMs * 1000L).coerceAtLeast(0L))
+            for (i in 0 until countToExtract) {
+                val timeUs = (i * intervalUs).coerceIn(0L, durationUs)
                 var frameBitmap: Bitmap? = null
 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
@@ -242,7 +251,7 @@ object MediaHelper {
                 }
 
                 if (frameBitmap != null) {
-                    // Check if manual rotation is required (API < 27 or if frame was not auto-rotated)
+                    // Enforce correct display orientation if rotation was not auto-applied
                     val frameIsLandscape = frameBitmap.width > frameBitmap.height
                     val naturalIsPortrait = naturalH > naturalW
                     if (isRotated90or270 && frameIsLandscape && naturalIsPortrait) {
@@ -278,7 +287,7 @@ object MediaHelper {
                 width = frames.first().width,
                 height = frames.first().height,
                 frameCount = frames.size,
-                fps = 30,
+                fps = detectedFps,
                 hasAudio = hasAudio,
                 frames = frames
             )

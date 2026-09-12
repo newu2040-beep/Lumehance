@@ -144,11 +144,11 @@ fun SettingsSheet(
                                     fontSize = if (isCompact) 12.sp else 14.sp,
                                     fontWeight = FontWeight.Bold
                                 )
-                                StatusBadge(text = "100% FREE", isAccent = true)
+                                StatusBadge(text = "UNLOCKED", isAccent = true)
                             }
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "Zero paywalls. 1080p to 4K Ultra HD exports, 120 FPS high framerates, and all neural AI models are permanently unlocked.",
+                                text = "1080p to 4K Ultra HD exports, 120 FPS high framerates, and all neural AI models are permanently unlocked.",
                                 color = colors.textSecondary,
                                 fontSize = if (isCompact) 10.sp else 11.sp,
                                 lineHeight = if (isCompact) 13.sp else 15.sp

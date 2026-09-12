@@ -119,7 +119,7 @@ fun ExportSheet(
                             StatusBadge(text = "UNLOCKED", isAccent = true)
                         }
                         Text(
-                            text = if (isVideo) "Audio Preserved • Native Ratio • Up to 120 FPS" else "Zero paywalls • 1080p to 4K Ultra HD • Native Ratio",
+                            text = if (isVideo) "Audio Preserved • Native Ratio • Up to 120 FPS" else "1080p to 4K Ultra HD • Native Ratio",
                             color = colors.textSecondary,
                             fontSize = 11.sp,
                             maxLines = 1,
@@ -140,7 +140,7 @@ fun ExportSheet(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // ZERO PAYWALLS PROMOTIONAL CARD
+                // STUDIO FEATURES CARD
                 GlassSurface(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp)
@@ -168,7 +168,7 @@ fun ExportSheet(
                         Spacer(modifier = Modifier.width(8.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "All Studio Features 100% Free",
+                                text = "All Studio Features Unlocked",
                                 color = colors.textPrimary,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold

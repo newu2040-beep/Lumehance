@@ -181,7 +181,7 @@ fun LibraryScreen(
                             )
                             if (!isVeryCompact) {
                                 Spacer(modifier = Modifier.width(5.dp))
-                                StatusBadge(text = "FREE", isAccent = true)
+                                StatusBadge(text = "PRO", isAccent = true)
                             }
                         }
                         if (!isCompact) {
