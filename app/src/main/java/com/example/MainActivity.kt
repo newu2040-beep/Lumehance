@@ -124,10 +124,16 @@ class MainActivity : ComponentActivity() {
                                             }
                                         },
                                         onMediaImport = { uri ->
-                                            viewModel.loadFromUri(uri, isVideo = false)
-                                            currentView = CurrentView.PHOTO_EDITOR
+                                            val isVideo = com.example.util.MediaHelper.isVideoUri(this@MainActivity, uri)
+                                            viewModel.loadFromUri(uri, isVideo = isVideo)
+                                            currentView = if (isVideo) {
+                                                CurrentView.VIDEO_EDITOR
+                                            } else {
+                                                CurrentView.PHOTO_EDITOR
+                                            }
                                         },
                                         onItemOpen = { entity ->
+                                            viewModel.loadEntity(entity)
                                             currentView = if (entity.mediaType == MediaType.PHOTO) {
                                                 CurrentView.PHOTO_EDITOR
                                             } else {

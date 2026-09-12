@@ -28,6 +28,7 @@ import com.example.engine.VideoEnhanceResult
 import com.example.engine.VideoProcessor
 import com.example.ui.theme.AccentTheme
 import com.example.util.MediaGallerySaver
+import com.example.util.MediaHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -222,32 +223,60 @@ class EnhanceViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun loadFromUri(uri: Uri, isVideo: Boolean = false) {
+    fun loadFromUri(uri: Uri, isVideo: Boolean? = null) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                _uiState.value = _uiState.value.copy(isProcessing = true, progressStatusText = "Importing media...")
-                val inputStream = context.contentResolver.openInputStream(uri)
-                val bitmap = BitmapFactory.decodeStream(inputStream)
-                inputStream?.close()
+                val detectedIsVideo = isVideo ?: MediaHelper.isVideoUri(context, uri)
+                _uiState.value = _uiState.value.copy(
+                    isProcessing = true,
+                    progressFraction = 0.1f,
+                    progressStatusText = if (detectedIsVideo) "Extracting video frames..." else "Importing photo..."
+                )
 
-                if (bitmap != null) {
-                    _uiState.value = _uiState.value.copy(
-                        activeOriginalBitmap = bitmap,
-                        activeEnhancedBitmap = bitmap,
-                        activeTitle = "Imported ${if (isVideo) "Video" else "Photo"}",
-                        activeMediaType = if (isVideo) MediaType.VIDEO else MediaType.PHOTO,
-                        isVideoMode = isVideo,
-                        isProcessing = false,
-                        lastOutput = null
-                    )
-                    if (!isVideo) {
-                        runEnhancePhoto()
+                if (detectedIsVideo) {
+                    val videoMeta = MediaHelper.extractVideoFrames(context, uri, targetFrameCount = 12)
+                    if (videoMeta != null && videoMeta.frames.isNotEmpty()) {
+                        val firstFrame = videoMeta.frames.first()
+                        _uiState.value = _uiState.value.copy(
+                            activeOriginalBitmap = firstFrame,
+                            activeEnhancedBitmap = firstFrame,
+                            activeTitle = "Imported Video (${videoMeta.frames.size} frames)",
+                            activeMediaType = MediaType.VIDEO,
+                            isVideoMode = true,
+                            videoFrames = videoMeta.frames,
+                            enhancedVideoFrames = emptyList(),
+                            currentVideoFrameIndex = 0,
+                            isProcessing = false,
+                            progressFraction = 1f,
+                            progressStatusText = "Video ready for 4K enhancement"
+                        )
+                    } else {
+                        _uiState.value = _uiState.value.copy(
+                            isProcessing = false,
+                            snackbarMessage = "Could not decode video stream from selected file."
+                        )
                     }
                 } else {
-                    _uiState.value = _uiState.value.copy(
-                        isProcessing = false,
-                        snackbarMessage = "Unable to decode selected file."
-                    )
+                    val bitmap = MediaHelper.loadOptimizedBitmap(context, uri, maxDimension = 1920)
+                    if (bitmap != null) {
+                        _uiState.value = _uiState.value.copy(
+                            activeOriginalBitmap = bitmap,
+                            activeEnhancedBitmap = bitmap,
+                            activeTitle = "Imported Photo",
+                            activeMediaType = MediaType.PHOTO,
+                            isVideoMode = false,
+                            videoFrames = emptyList(),
+                            enhancedVideoFrames = emptyList(),
+                            isProcessing = false,
+                            lastOutput = null
+                        )
+                        runEnhancePhoto()
+                    } else {
+                        _uiState.value = _uiState.value.copy(
+                            isProcessing = false,
+                            snackbarMessage = "Unable to decode selected photo."
+                        )
+                    }
                 }
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
@@ -257,6 +286,67 @@ class EnhanceViewModel(application: Application) : AndroidViewModel(application)
             }
         }
     }
+
+    fun loadEntity(entity: EnhancementEntity) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                _uiState.value = _uiState.value.copy(
+                    isProcessing = true,
+                    progressStatusText = "Opening ${entity.title}..."
+                )
+                val isVideo = entity.mediaType == MediaType.VIDEO
+
+                if (isVideo) {
+                    val enhancedUriStr = entity.enhancedUri
+                    val uri = try { enhancedUriStr?.let { Uri.parse(it) } } catch (_: Throwable) { null }
+                    val videoMeta = if (uri != null && (enhancedUriStr?.startsWith("content://") == true || enhancedUriStr?.startsWith("file://") == true)) {
+                        MediaHelper.extractVideoFrames(context, uri)
+                    } else null
+
+                    val frames = videoMeta?.frames ?: SampleMediaProvider.generateVideoFrames(context, R.drawable.sample_night_city, 10)
+                    val firstFrame = frames.firstOrNull()
+
+                    _uiState.value = _uiState.value.copy(
+                        activeOriginalBitmap = firstFrame,
+                        activeEnhancedBitmap = firstFrame,
+                        activeTitle = entity.title,
+                        activeMediaType = MediaType.VIDEO,
+                        activeEntityId = entity.id,
+                        isVideoMode = true,
+                        videoFrames = frames,
+                        enhancedVideoFrames = frames,
+                        currentVideoFrameIndex = 0,
+                        isProcessing = false
+                    )
+                } else {
+                    val enhancedUriStr = entity.enhancedUri
+                    val uri = try { enhancedUriStr?.let { Uri.parse(it) } } catch (_: Throwable) { null }
+                    val bitmap = if (uri != null && (enhancedUriStr?.startsWith("content://") == true || enhancedUriStr?.startsWith("file://") == true)) {
+                        MediaHelper.loadOptimizedBitmap(context, uri)
+                    } else null
+
+                    val finalBitmap = bitmap ?: SampleMediaProvider.loadBitmap(context, R.drawable.sample_vintage)
+                    _uiState.value = _uiState.value.copy(
+                        activeOriginalBitmap = finalBitmap,
+                        activeEnhancedBitmap = finalBitmap,
+                        activeTitle = entity.title,
+                        activeMediaType = MediaType.PHOTO,
+                        activeEntityId = entity.id,
+                        isVideoMode = false,
+                        isProcessing = false,
+                        lastOutput = null
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    isProcessing = false,
+                    snackbarMessage = "Error opening item: ${e.localizedMessage}"
+                )
+            }
+        }
+    }
+
+    private var livePreviewJob: kotlinx.coroutines.Job? = null
 
     fun applyPreset(preset: EnhancePreset) {
         val newConfig = EnhancementConfig.fromPreset(preset)
@@ -269,8 +359,20 @@ class EnhanceViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun updateConfig(config: EnhancementConfig) {
+    fun updateConfig(config: EnhancementConfig, triggerLivePreview: Boolean = true) {
         _uiState.value = _uiState.value.copy(config = config)
+        if (triggerLivePreview && !_uiState.value.isVideoMode && !_uiState.value.isProcessing) {
+            val orig = _uiState.value.activeOriginalBitmap ?: return
+            livePreviewJob?.cancel()
+            livePreviewJob = viewModelScope.launch(Dispatchers.Default) {
+                kotlinx.coroutines.delay(35) // fast responsive debounce (under 2 frames)
+                val previewBitmap = ImageProcessor.enhanceFastPreview(orig, config)
+                _uiState.value = _uiState.value.copy(
+                    activeEnhancedBitmap = previewBitmap,
+                    progressStatusText = "⚡ Real-Time On-Device Preview Active"
+                )
+            }
+        }
     }
 
     fun runEnhancePhoto() {

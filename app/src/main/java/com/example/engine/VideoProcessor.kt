@@ -3,9 +3,13 @@ package com.example.engine
 import android.graphics.Bitmap
 import com.example.domain.model.EnhancementConfig
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
 data class VideoEnhanceProgress(
     val currentFrame: Int,
@@ -13,7 +17,8 @@ data class VideoEnhanceProgress(
     val progressFraction: Float,
     val statusText: String,
     val currentFrameBitmap: Bitmap?,
-    val isPaused: Boolean = false
+    val isPaused: Boolean = false,
+    val speedFps: Float = 0f
 )
 
 data class VideoEnhanceResult(
@@ -43,6 +48,10 @@ class VideoProcessor {
         isPaused.set(false)
     }
 
+    /**
+     * Parallel video frame processing engine. Uses available CPU cores to batch-process
+     * video keyframes concurrently while maintaining frame ordering and smooth live progress feedback.
+     */
     suspend fun processFrames(
         frames: List<Bitmap>,
         config: EnhancementConfig,
@@ -53,56 +62,72 @@ class VideoProcessor {
         isPaused.set(false)
 
         val total = frames.size
-        val outputFrames = ArrayList<Bitmap>(total)
+        if (total == 0) return@withContext null
 
-        for (i in frames.indices) {
-            if (isCancelled.get()) {
-                return@withContext null
-            }
+        val processedFrames = arrayOfNulls<Bitmap>(total)
+        val completedCount = AtomicInteger(0)
+        val concurrency = 2.coerceAtMost(Runtime.getRuntime().availableProcessors())
+
+        // Process in concurrent chunks of size 'concurrency'
+        for (chunkStart in frames.indices step concurrency) {
+            if (isCancelled.get()) return@withContext null
 
             while (isPaused.get()) {
                 if (isCancelled.get()) return@withContext null
+                val count = completedCount.get()
                 onProgress(
                     VideoEnhanceProgress(
-                        currentFrame = i + 1,
+                        currentFrame = count,
                         totalFrames = total,
-                        progressFraction = (i.toFloat() / total),
-                        statusText = "Paused at frame ${i + 1} of $total",
-                        currentFrameBitmap = if (outputFrames.isNotEmpty()) outputFrames.last() else frames[i],
+                        progressFraction = count.toFloat() / total,
+                        statusText = "Paused at frame $count of $total",
+                        currentFrameBitmap = processedFrames.filterNotNull().lastOrNull() ?: frames.first(),
                         isPaused = true
                     )
                 )
-                delay(200)
+                delay(150)
             }
 
-            val sourceFrame = frames[i]
-            // Frame enhancement: apply denoise + super-res / sharpen
-            val enhancedOutput = ImageProcessor.enhance(sourceFrame, config) { frac, desc ->
-                // internal frame progress
+            val chunkEnd = (chunkStart + concurrency).coerceAtMost(total)
+            coroutineScope {
+                val jobs = (chunkStart until chunkEnd).map { idx ->
+                    async {
+                        if (isCancelled.get()) return@async null
+                        val source = frames[idx]
+                        val enhanced = ImageProcessor.enhance(source, config) { _, _ -> }
+                        processedFrames[idx] = enhanced.enhancedBitmap
+                        val done = completedCount.incrementAndGet()
+                        val elapsedSec = (System.currentTimeMillis() - startTime) / 1000f
+                        val fps = if (elapsedSec > 0) done / elapsedSec else 0f
+                        val frac = done.toFloat() / total
+                        onProgress(
+                            VideoEnhanceProgress(
+                                currentFrame = done,
+                                totalFrames = total,
+                                progressFraction = frac,
+                                statusText = "Enhancing frame $done/$total (${String.format("%.1f", fps)} fps)",
+                                currentFrameBitmap = enhanced.enhancedBitmap,
+                                isPaused = false,
+                                speedFps = fps
+                            )
+                        )
+                    }
+                }
+                jobs.awaitAll()
             }
-            outputFrames.add(enhancedOutput.enhancedBitmap)
-
-            val frac = (i + 1).toFloat() / total
-            onProgress(
-                VideoEnhanceProgress(
-                    currentFrame = i + 1,
-                    totalFrames = total,
-                    progressFraction = frac,
-                    statusText = "Processing frame ${i + 1} of $total (${(frac * 100).toInt()}%)",
-                    currentFrameBitmap = enhancedOutput.enhancedBitmap,
-                    isPaused = false
-                )
-            )
         }
 
-        val elapsed = System.currentTimeMillis() - startTime
-        val sampleOut = outputFrames.first()
+        if (isCancelled.get()) return@withContext null
 
-        // Estimate size based on bitrate: (width * height * fps * bitrate_factor)
-        val estimatedMb = (total * 0.45f).coerceAtLeast(1.5f)
+        val finalFrames = processedFrames.filterNotNull()
+        if (finalFrames.isEmpty()) return@withContext null
+
+        val elapsed = System.currentTimeMillis() - startTime
+        val sampleOut = finalFrames.first()
+        val estimatedMb = (total * 0.35f).coerceAtLeast(1.2f)
 
         VideoEnhanceResult(
-            enhancedFrames = outputFrames,
+            enhancedFrames = finalFrames,
             processingTimeMs = elapsed,
             originalFps = 30,
             outputFps = config.videoFpsTarget,

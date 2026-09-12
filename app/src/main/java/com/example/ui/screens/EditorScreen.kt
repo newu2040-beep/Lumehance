@@ -219,40 +219,64 @@ fun EditorScreen(
                             .padding(vertical = 6.dp),
                         shape = RoundedCornerShape(16.dp)
                     ) {
-                        Row(
+                        Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 14.dp, vertical = 10.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                                .padding(horizontal = 14.dp, vertical = 10.dp)
                         ) {
-                            Column {
-                                Text(
-                                    text = "RESOLUTION",
-                                    color = colors.textTertiary,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = "${lastOutput.originalWidth}x${lastOutput.originalHeight} → ${lastOutput.enhancedWidth}x${lastOutput.enhancedHeight}",
-                                    color = colors.textPrimary,
-                                    fontSize = if (isCompact) 12.sp else 13.sp,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text(
+                                        text = "RESOLUTION",
+                                        color = colors.textTertiary,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "${lastOutput.originalWidth}x${lastOutput.originalHeight} → ${lastOutput.enhancedWidth}x${lastOutput.enhancedHeight}",
+                                        color = colors.textPrimary,
+                                        fontSize = if (isCompact) 12.sp else 13.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
 
-                            Column(horizontalAlignment = Alignment.End) {
+                                Column(horizontalAlignment = Alignment.End) {
+                                    Text(
+                                        text = "TIME & PASSES",
+                                        color = colors.textTertiary,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "${lastOutput.processingTimeMs}ms • ${lastOutput.passes.size} passes",
+                                        color = colors.accent,
+                                        fontSize = if (isCompact) 12.sp else 13.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                            }
+                            
+                            Spacer(modifier = Modifier.height(6.dp))
+                            
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
                                 Text(
-                                    text = "TIME & PASSES",
-                                    color = colors.textTertiary,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold
+                                    text = "⚡ ${lastOutput.engineName}",
+                                    color = colors.accent,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium
                                 )
                                 Text(
-                                    text = "${lastOutput.processingTimeMs}ms • ${lastOutput.passes.size} passes",
-                                    color = colors.accent,
-                                    fontSize = if (isCompact) 12.sp else 13.sp,
-                                    fontWeight = FontWeight.SemiBold
+                                    text = "100% On-Device • Zero Cloud",
+                                    color = colors.textTertiary,
+                                    fontSize = 10.sp
                                 )
                             }
                         }
