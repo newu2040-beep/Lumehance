@@ -30,7 +30,42 @@ enum class ExportResolution(
     RES_1080P("1080p Full HD", 1920, 1080, "1920 × 1080 • Crisp & Compact"),
     RES_2K("2K Quad HD", 2560, 1440, "2560 × 1440 • High Fidelity"),
     RES_4K("4K Ultra HD", 3840, 2160, "3840 × 2160 • Studio Master UHD"),
-    NATIVE("Source Native", 0, 0, "Preserve input dimensions")
+    NATIVE("Source Native", 0, 0, "Preserve input dimensions");
+
+    fun getTargetDimensions(srcWidth: Int, srcHeight: Int): Pair<Int, Int> {
+        if (srcWidth <= 0 || srcHeight <= 0) return Pair(1920, 1080)
+        if (this == NATIVE) return Pair(srcWidth, srcHeight)
+
+        val targetMax = when (this) {
+            RES_1080P -> 1920
+            RES_2K -> 2560
+            RES_4K -> 3840
+            NATIVE -> maxOf(srcWidth, srcHeight)
+        }
+
+        val aspect = srcWidth.toFloat() / srcHeight.toFloat()
+        val (w, h) = if (srcWidth >= srcHeight) {
+            val w = targetMax
+            val h = (targetMax / aspect).toInt().coerceAtLeast(2)
+            Pair(w, if (h % 2 != 0) h + 1 else h)
+        } else {
+            val h = targetMax
+            val w = (targetMax * aspect).toInt().coerceAtLeast(2)
+            Pair(if (w % 2 != 0) w + 1 else w, h)
+        }
+        return Pair(w, h)
+    }
+
+    fun getDynamicDescription(srcWidth: Int, srcHeight: Int): String {
+        if (srcWidth <= 0 || srcHeight <= 0) return description
+        val (w, h) = getTargetDimensions(srcWidth, srcHeight)
+        return when (this) {
+            RES_1080P -> "$w × $h • Crisp & Compact"
+            RES_2K -> "$w × $h • High Fidelity"
+            RES_4K -> "$w × $h • Studio Master UHD"
+            NATIVE -> "$w × $h • 100% Original Ratio"
+        }
+    }
 }
 
 data class EnhancementConfig(

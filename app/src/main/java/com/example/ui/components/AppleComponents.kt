@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
@@ -75,33 +76,47 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.theme.LumenhanceTheme
 
 /**
- * Apple-style Frosted Glass Surface
+ * Frosted Glass Surface
  */
 @Composable
 fun GlassSurface(
     modifier: Modifier = Modifier,
     shape: Shape = RoundedCornerShape(22.dp),
     tonalElevation: Dp = 0.dp,
+    strokeColor: Color? = null,
     content: @Composable () -> Unit
 ) {
     val colors = LumenhanceTheme.colors
+    val borderBrush = if (strokeColor != null) {
+        Brush.verticalGradient(
+            listOf(
+                strokeColor,
+                strokeColor.copy(alpha = 0.2f)
+            )
+        )
+    } else {
+        Brush.verticalGradient(
+            listOf(
+                colors.surfaceGlassBorder,
+                colors.surfaceGlassBorder.copy(alpha = 0.04f)
+            )
+        )
+    }
+
     Surface(
         modifier = modifier
             .clip(shape)
             .border(
                 width = 1.dp,
-                brush = Brush.verticalGradient(
-                    listOf(
-                        colors.surfaceGlassBorder,
-                        colors.surfaceGlassBorder.copy(alpha = 0.04f)
-                    )
-                ),
+                brush = borderBrush,
                 shape = shape
             ),
         shape = shape,
@@ -113,7 +128,7 @@ fun GlassSurface(
 }
 
 /**
- * Apple-style Pill Action Button with spring scale feedback
+ * Pill Action Button with spring scale feedback
  */
 @Composable
 fun PillButton(
@@ -208,7 +223,7 @@ fun PillButton(
 }
 
 /**
- * Apple Capsule Segmented Control
+ * Capsule Segmented Control
  */
 @Composable
 fun <T> CapsuleSegmentedControl(
@@ -262,7 +277,7 @@ fun <T> CapsuleSegmentedControl(
 
 /**
  * Signature Draggable Split Before/After Comparison View
- * Allows interactive dragging of the split divider across original & enhanced bitmaps
+ * Preserves 100% native aspect ratio without distortion or stretching
  */
 @Composable
 fun DraggableSplitComparison(
@@ -277,18 +292,11 @@ fun DraggableSplitComparison(
     var isHoldingOriginal by remember { mutableStateOf(false) }
     val colors = LumenhanceTheme.colors
 
-    val photoRatio = remember(originalBitmap) {
-        if (originalBitmap.height > 0) {
-            (originalBitmap.width.toFloat() / originalBitmap.height.toFloat()).coerceIn(0.75f, 1.8f)
-        } else {
-            1.25f
-        }
-    }
-
     BoxWithConstraints(
         modifier = modifier
             .clip(RoundedCornerShape(22.dp))
-            .background(Color.Black)
+            .background(Color(0xFF030712))
+            .border(1.dp, colors.subtleBorder, RoundedCornerShape(22.dp))
             .pointerInput(Unit) {
                 detectTapGestures(
                     onPress = {
@@ -319,17 +327,34 @@ fun DraggableSplitComparison(
             val canvasWidth = size.width
             val canvasHeight = size.height
 
+            // Calculate exact fit maintaining native aspect ratio
+            val imgAspect = if (originalBitmap.height > 0) originalBitmap.width.toFloat() / originalBitmap.height.toFloat() else 1f
+            val canvasAspect = if (canvasHeight > 0) canvasWidth / canvasHeight else 1f
+
+            val (dstW, dstH, dstLeft, dstTop) = if (imgAspect > canvasAspect) {
+                val h = canvasWidth / imgAspect
+                listOf(canvasWidth, h, 0f, (canvasHeight - h) / 2f)
+            } else {
+                val w = canvasHeight * imgAspect
+                listOf(w, canvasHeight, (canvasWidth - w) / 2f, 0f)
+            }
+
+            val dstOffset = IntOffset(dstLeft.toInt(), dstTop.toInt())
+            val dstSize = IntSize(dstW.toInt(), dstH.toInt())
+
             if (isHoldingOriginal) {
                 // Showing full original
                 drawImage(
                     image = origImageBitmap,
-                    dstSize = androidx.compose.ui.unit.IntSize(canvasWidth.toInt(), canvasHeight.toInt())
+                    dstOffset = dstOffset,
+                    dstSize = dstSize
                 )
             } else {
                 // Right side: Enhanced
                 drawImage(
                     image = enhImageBitmap,
-                    dstSize = androidx.compose.ui.unit.IntSize(canvasWidth.toInt(), canvasHeight.toInt())
+                    dstOffset = dstOffset,
+                    dstSize = dstSize
                 )
 
                 // Left side: Original clipped up to splitX
@@ -339,7 +364,8 @@ fun DraggableSplitComparison(
                 clipPath(clipPath) {
                     drawImage(
                         image = origImageBitmap,
-                        dstSize = androidx.compose.ui.unit.IntSize(canvasWidth.toInt(), canvasHeight.toInt())
+                        dstOffset = dstOffset,
+                        dstSize = dstSize
                     )
                 }
 
@@ -395,7 +421,7 @@ fun DraggableSplitComparison(
                 )
                 if (!isHoldingOriginal) {
                     StatusBadge(
-                        text = "ENHANCED",
+                        text = "4K MASTER",
                         isAccent = true
                     )
                 }
@@ -405,7 +431,7 @@ fun DraggableSplitComparison(
 }
 
 /**
- * Apple Status Badge
+ * Status Badge
  */
 @Composable
 fun StatusBadge(
@@ -452,8 +478,9 @@ fun SpringSlider(
     value: Float,
     onValueChange: (Float) -> Unit,
     modifier: Modifier = Modifier,
-    valueFormat: String = "${(value * 100).toInt()}%",
-    enabled: Boolean = true
+    valueRange: ClosedFloatingPointRange<Float> = 0f..1f,
+    displayFormatter: (Float) -> String = { "${(it * 100).toInt()}%" },
+    compact: Boolean = false
 ) {
     val colors = LumenhanceTheme.colors
 
@@ -465,35 +492,34 @@ fun SpringSlider(
         ) {
             Text(
                 text = title,
-                style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
                 color = colors.textPrimary,
+                fontSize = if (compact) 12.sp else 13.sp,
                 fontWeight = FontWeight.Medium
             )
             Text(
-                text = valueFormat,
-                style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
+                text = displayFormatter(value),
                 color = colors.accent,
-                fontWeight = FontWeight.SemiBold
+                fontSize = if (compact) 12.sp else 13.sp,
+                fontWeight = FontWeight.Bold
             )
         }
+        Spacer(modifier = Modifier.height(2.dp))
         Slider(
             value = value,
             onValueChange = onValueChange,
-            enabled = enabled,
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag("slider_$title"),
+            valueRange = valueRange,
             colors = SliderDefaults.colors(
                 thumbColor = colors.accent,
                 activeTrackColor = colors.accent,
                 inactiveTrackColor = colors.subtleBorder
-            )
+            ),
+            modifier = Modifier.fillMaxWidth()
         )
     }
 }
 
 /**
- * Animated Theme Toggle Button
+ * Animated theme toggle button
  */
 @Composable
 fun MorphThemeToggle(
@@ -502,30 +528,17 @@ fun MorphThemeToggle(
     modifier: Modifier = Modifier
 ) {
     val colors = LumenhanceTheme.colors
-
-    Box(
+    IconButton(
+        onClick = onToggle,
         modifier = modifier
-            .clip(RoundedCornerShape(50))
-            .background(colors.cardSurface)
-            .border(1.dp, colors.subtleBorder, RoundedCornerShape(50))
-            .clickable(onClick = onToggle)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        contentAlignment = Alignment.Center
+            .size(36.dp)
+            .testTag("theme_toggle_button")
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                imageVector = if (isDark) Icons.Default.DarkMode else Icons.Default.LightMode,
-                contentDescription = if (isDark) "Dark mode" else "Light mode",
-                tint = colors.accent,
-                modifier = Modifier.size(16.dp)
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                text = if (isDark) "Dark" else "Light",
-                color = colors.textPrimary,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold
-            )
-        }
+        Icon(
+            imageVector = if (isDark) Icons.Default.LightMode else Icons.Default.DarkMode,
+            contentDescription = if (isDark) "Switch to Light Mode" else "Switch to Dark Mode",
+            tint = colors.textPrimary,
+            modifier = Modifier.size(20.dp)
+        )
     }
 }

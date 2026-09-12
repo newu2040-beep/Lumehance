@@ -93,7 +93,7 @@ object PermissionManager {
             ) == PackageManager.PERMISSION_GRANTED || Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
         }
 
-        val areAllGranted = hasNotifications && hasGallery && hasFilesAccess
+        val areAllGranted = (hasGallery || hasFilesAccess) && hasNotifications
 
         return AppPermissionStatus(
             hasNotifications = hasNotifications,
@@ -104,11 +104,18 @@ object PermissionManager {
     }
 
     fun openAppSettings(context: Context) {
-        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-            data = Uri.fromParts("package", context.packageName, null)
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        try {
+            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = Uri.fromParts("package", context.packageName, null)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            val intent = Intent(Settings.ACTION_SETTINGS).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            context.startActivity(intent)
         }
-        context.startActivity(intent)
     }
 
     fun openAllFilesAccessSettings(context: Context) {
@@ -120,10 +127,14 @@ object PermissionManager {
                 }
                 context.startActivity(intent)
             } catch (e: Exception) {
-                val fallbackIntent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION).apply {
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                try {
+                    val fallbackIntent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION).apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    }
+                    context.startActivity(fallbackIntent)
+                } catch (e2: Exception) {
+                    openAppSettings(context)
                 }
-                context.startActivity(fallbackIntent)
             }
         } else {
             openAppSettings(context)

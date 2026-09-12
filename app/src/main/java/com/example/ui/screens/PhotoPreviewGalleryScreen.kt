@@ -14,6 +14,7 @@ import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -25,20 +26,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Compare
-import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -60,10 +56,10 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.core.content.FileProvider
 import com.example.data.local.EnhancementEntity
 import com.example.ui.components.DraggableSplitComparison
 import com.example.ui.components.GlassSurface
@@ -91,7 +87,6 @@ fun PhotoPreviewGalleryScreen(
     var offset by remember { mutableStateOf(Offset.Zero) }
     var showCompareSlider by remember { mutableStateOf(false) }
     var showInfoPanel by remember { mutableStateOf(false) }
-    var isSavedToGallery by remember { mutableStateOf(true) }
 
     val displayBitmap = currentEnhancedBitmap ?: currentOriginalBitmap
 
@@ -140,7 +135,7 @@ fun PhotoPreviewGalleryScreen(
                     )
                 }
             } else if (displayBitmap != null) {
-                // High-res photo view with pinch-to-zoom and pan
+                // High-res photo view with pinch-to-zoom and pan, preserving 100% native aspect ratio
                 Image(
                     bitmap = displayBitmap.asImageBitmap(),
                     contentDescription = "Photo Preview",
@@ -156,24 +151,24 @@ fun PhotoPreviewGalleryScreen(
                 )
             } else {
                 Text(
-                    text = "No Photo Loaded",
+                    text = "No Photo Available",
                     color = colors.textSecondary,
-                    fontSize = 16.sp
+                    fontSize = 14.sp
                 )
             }
         }
 
-        // TOP CONTROLS BAR (ADAPTIVE)
+        // TOP NAVIGATION BAR
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .align(Alignment.TopCenter)
                 .background(
                     androidx.compose.ui.graphics.Brush.verticalGradient(
-                        listOf(Color.Black.copy(alpha = 0.8f), Color.Transparent)
+                        listOf(Color.Black.copy(alpha = 0.85f), Color.Transparent)
                     )
                 )
-                .padding(horizontal = if (isCompact) 10.dp else 16.dp, vertical = if (isCompact) 8.dp else 12.dp),
+                .padding(horizontal = if (isCompact) 10.dp else 16.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -184,18 +179,18 @@ fun PhotoPreviewGalleryScreen(
                 IconButton(
                     onClick = onBackClick,
                     modifier = Modifier
-                        .size(if (isCompact) 34.dp else 38.dp)
+                        .size(if (isCompact) 32.dp else 36.dp)
                         .clip(CircleShape)
-                        .background(Color.Black.copy(alpha = 0.4f))
+                        .background(Color.Black.copy(alpha = 0.5f))
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back",
                         tint = Color.White,
-                        modifier = Modifier.size(if (isCompact) 18.dp else 22.dp)
+                        modifier = Modifier.size(if (isCompact) 16.dp else 18.dp)
                     )
                 }
-                Spacer(modifier = Modifier.width(if (isCompact) 6.dp else 12.dp))
+                Spacer(modifier = Modifier.width(8.dp))
                 Column(modifier = Modifier.weight(1f, fill = false)) {
                     Text(
                         text = title,
@@ -205,30 +200,27 @@ fun PhotoPreviewGalleryScreen(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                    Text(
-                        text = if (currentEnhancedBitmap != null) {
-                            "${currentEnhancedBitmap.width} × ${currentEnhancedBitmap.height} • Ultra HD"
-                        } else {
-                            "Preview"
-                        },
-                        color = colors.accent,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    displayBitmap?.let { bmp ->
+                        Text(
+                            text = "${bmp.width} × ${bmp.height} • On-Device HDR",
+                            color = colors.accent,
+                            fontSize = 11.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(if (isCompact) 4.dp else 6.dp)) {
-                // Toggle Split Comparison Slider
+            // Quick Actions
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 if (currentOriginalBitmap != null && currentEnhancedBitmap != null) {
+                    // Split compare toggle
                     IconButton(
-                        onClick = {
-                            showCompareSlider = !showCompareSlider
-                            scale = 1f
-                            offset = Offset.Zero
-                        },
+                        onClick = { showCompareSlider = !showCompareSlider },
                         modifier = Modifier
                             .size(if (isCompact) 32.dp else 36.dp)
                             .clip(CircleShape)
@@ -243,7 +235,7 @@ fun PhotoPreviewGalleryScreen(
                     }
                 }
 
-                // Info button
+                // Info toggle
                 IconButton(
                     onClick = { showInfoPanel = !showInfoPanel },
                     modifier = Modifier
@@ -368,7 +360,7 @@ fun PhotoPreviewGalleryScreen(
 
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "✓ Automatically saved to device Gallery (Pictures/Lumenhance)",
+                        text = "✓ 100% Native Aspect Ratio Maintained",
                         color = colors.accent,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Medium
@@ -391,7 +383,7 @@ fun PhotoPreviewGalleryScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Re-save to Gallery button
+            // Save to Gallery button
             PillButton(
                 text = if (isCompact) "Save Gallery" else "Save to Gallery",
                 onClick = onSaveToGalleryClick,
@@ -401,18 +393,19 @@ fun PhotoPreviewGalleryScreen(
                 testTag = "gallery_save_button"
             )
 
-            // Share button
+            // Direct Native Share button
             IconButton(
                 onClick = {
                     displayBitmap?.let { bmp ->
                         try {
-                            val shareFile = File(context.cacheDir, "share_${System.currentTimeMillis()}.jpg")
+                            val sharedDir = File(context.cacheDir, "shared_images").apply { if (!exists()) mkdirs() }
+                            val shareFile = File(sharedDir, "Lumenhance_Photo_${System.currentTimeMillis()}.jpg")
                             val fos = FileOutputStream(shareFile)
-                            bmp.compress(Bitmap.CompressFormat.JPEG, 95, fos)
+                            bmp.compress(Bitmap.CompressFormat.JPEG, 96, fos)
                             fos.flush()
                             fos.close()
 
-                            val uri = androidx.core.content.FileProvider.getUriForFile(
+                            val uri = FileProvider.getUriForFile(
                                 context,
                                 "${context.packageName}.fileprovider",
                                 shareFile
@@ -420,11 +413,16 @@ fun PhotoPreviewGalleryScreen(
                             val intent = Intent(Intent.ACTION_SEND).apply {
                                 type = "image/jpeg"
                                 putExtra(Intent.EXTRA_STREAM, uri)
-                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                putExtra(Intent.EXTRA_SUBJECT, "Enhanced Photo")
+                                putExtra(Intent.EXTRA_TEXT, "Enhanced with Lumenhance On-Device HDR")
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
                             }
-                            context.startActivity(Intent.createChooser(intent, "Share Enhanced Photo"))
+                            val chooser = Intent.createChooser(intent, "Share Master Photo with...").apply {
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            context.startActivity(chooser)
                         } catch (e: Exception) {
-                            // Fallback standard share
+                            // Handled safely
                         }
                     }
                 },

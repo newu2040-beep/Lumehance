@@ -4,10 +4,10 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,20 +16,24 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,9 +48,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.ui.components.GlassSurface
 import com.example.ui.components.PillButton
 import com.example.ui.theme.LumenhanceTheme
@@ -62,6 +66,19 @@ fun PermissionManagementSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     var status by remember { mutableStateOf(PermissionManager.checkStatus(context)) }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                status = PermissionManager.checkStatus(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     val multiPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
@@ -107,13 +124,13 @@ fun PermissionManagementSheet(
                     Spacer(modifier = Modifier.width(if (isCompact) 10.dp else 14.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "App Permissions & Access",
+                            text = "App Permissions & Full Access",
                             color = colors.textPrimary,
                             fontSize = if (isCompact) 16.sp else 18.sp,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "Full gallery, auto-save, and notification access",
+                            text = "Full gallery, batch queue, and background processing access",
                             color = colors.textSecondary,
                             fontSize = if (isCompact) 11.sp else 12.sp
                         )
@@ -124,7 +141,7 @@ fun PermissionManagementSheet(
 
                 // Master "Allow All Permissions" Button
                 PillButton(
-                    text = if (status.areAllGranted) "All Permissions Granted ✓" else "Allow All Permissions",
+                    text = if (status.areAllGranted) "Full Access Active ✓" else "Allow Full Access",
                     onClick = {
                         val permissions = PermissionManager.getAllInitialPermissions()
                         multiPermissionLauncher.launch(permissions)
@@ -143,8 +160,8 @@ fun PermissionManagementSheet(
                 // Item 1: Notifications
                 PermissionRowItem(
                     icon = Icons.Default.Notifications,
-                    title = "Notifications & Auto-Save Alerts",
-                    subtitle = "Instant alert when photo/video auto-saves to Gallery",
+                    title = "Notifications & Live Progress",
+                    subtitle = "Real-time alerts when video/photo processing completes",
                     isGranted = status.hasNotifications,
                     compact = isCompact,
                     onGrantClick = {
@@ -162,7 +179,7 @@ fun PermissionManagementSheet(
                 PermissionRowItem(
                     icon = Icons.Default.PhotoLibrary,
                     title = "Gallery & Photos / Videos",
-                    subtitle = "Access high-res original photos and save to Pictures",
+                    subtitle = "Access high-res footage and auto-save master exports",
                     isGranted = status.hasGallery,
                     compact = isCompact,
                     onGrantClick = {
@@ -176,7 +193,7 @@ fun PermissionManagementSheet(
                 PermissionRowItem(
                     icon = Icons.Default.Folder,
                     title = "Full Files & Storage Access",
-                    subtitle = "Enables batch library processing and full disk save",
+                    subtitle = "Enables batch queue processing and direct disk master saving",
                     isGranted = status.hasFilesAccess,
                     compact = isCompact,
                     onGrantClick = {
@@ -184,10 +201,25 @@ fun PermissionManagementSheet(
                     }
                 )
 
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Item 4: App System Settings
+                PermissionRowItem(
+                    icon = Icons.Default.Settings,
+                    title = "System App Settings",
+                    subtitle = "Manage all permissions directly in Android System Settings",
+                    isGranted = false,
+                    buttonLabel = "Open",
+                    compact = isCompact,
+                    onGrantClick = {
+                        PermissionManager.openAppSettings(context)
+                    }
+                )
+
                 Spacer(modifier = Modifier.height(if (isCompact) 16.dp else 24.dp))
 
                 PillButton(
-                    text = "Close",
+                    text = "Done",
                     onClick = onDismiss,
                     isPrimary = false,
                     compact = isCompact,
@@ -204,6 +236,7 @@ fun PermissionRowItem(
     title: String,
     subtitle: String,
     isGranted: Boolean,
+    buttonLabel: String = "Allow",
     compact: Boolean = false,
     onGrantClick: () -> Unit
 ) {
@@ -291,7 +324,7 @@ fun PermissionRowItem(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "Allow",
+                        text = buttonLabel,
                         color = Color.Black,
                         fontSize = if (compact) 11.sp else 12.sp,
                         fontWeight = FontWeight.Bold

@@ -11,6 +11,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -49,6 +50,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -59,7 +61,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import androidx.compose.foundation.layout.BoxWithConstraints
 import com.example.ui.theme.LumenhanceTheme
 import kotlinx.coroutines.delay
 
@@ -84,7 +85,7 @@ fun InbuiltVideoPlayer(
     var isFullscreen by remember { mutableStateOf(false) }
     var controlsVisible by remember { mutableStateOf(true) }
 
-    // Coroutine loop for continuous playback
+    // Continuous real-time frame playback loop
     LaunchedEffect(isPlaying, playbackSpeed, activeFrames.size, isLooping) {
         if (isPlaying && activeFrames.isNotEmpty()) {
             val frameDelay = ((1000L / fps.coerceAtLeast(10)) / playbackSpeed).toLong().coerceAtLeast(16L)
@@ -109,6 +110,11 @@ fun InbuiltVideoPlayer(
     val safeIndex = currentFrameIndex.coerceIn(0, (activeFrames.size - 1).coerceAtLeast(0))
     val currentBitmap = if (activeFrames.isNotEmpty()) activeFrames[safeIndex] else null
 
+    // Compute dynamic native aspect ratio from media frame dimensions
+    val mediaAspect = if (currentBitmap != null && currentBitmap.width > 0 && currentBitmap.height > 0) {
+        (currentBitmap.width.toFloat() / currentBitmap.height.toFloat()).coerceIn(0.48f, 2.2f)
+    } else 1.77f
+
     // Video Player Content
     val playerContent = @Composable { inFullscreen: Boolean ->
         BoxWithConstraints(
@@ -119,7 +125,7 @@ fun InbuiltVideoPlayer(
             } else {
                 modifier
                     .fillMaxWidth()
-                    .aspectRatio(1.33f)
+                    .aspectRatio(mediaAspect)
                     .clip(RoundedCornerShape(22.dp))
                     .background(Color(0xFF030712))
                     .border(1.dp, colors.subtleBorder, RoundedCornerShape(22.dp))
@@ -133,13 +139,13 @@ fun InbuiltVideoPlayer(
             val isCompact = maxWidth < 380.dp
             val isVeryCompact = maxWidth < 330.dp
 
-            // Render active frame
+            // Render active frame maintaining 100% native aspect ratio
             if (currentBitmap != null) {
                 Image(
                     bitmap = currentBitmap.asImageBitmap(),
                     contentDescription = "Video Frame Player",
                     modifier = Modifier.fillMaxSize(),
-                    contentScale = if (inFullscreen) ContentScale.Fit else ContentScale.Crop
+                    contentScale = ContentScale.Fit
                 )
             } else {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -252,7 +258,7 @@ fun InbuiltVideoPlayer(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(
-                            androidx.compose.ui.graphics.Brush.verticalGradient(
+                            Brush.verticalGradient(
                                 listOf(Color.Transparent, Color.Black.copy(alpha = 0.88f))
                             )
                         )

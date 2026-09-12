@@ -23,6 +23,7 @@ data class VideoMetadata(
     val height: Int,
     val frameCount: Int,
     val fps: Int,
+    val hasAudio: Boolean,
     val frames: List<Bitmap>
 )
 
@@ -64,12 +65,13 @@ object MediaHelper {
 
     /**
      * Memory-safe bitmap loader with automatic downsampling to prevent OutOfMemory errors
-     * on large camera photos (e.g. 48MP/108MP) and automatic EXIF orientation correction.
+     * on large camera photos (e.g. 48MP/108MP) and automatic EXIF orientation correction,
+     * strictly preserving the exact aspect ratio.
      */
     suspend fun loadOptimizedBitmap(
         context: Context,
         uri: Uri,
-        maxDimension: Int = 1920
+        maxDimension: Int = 2560
     ): Bitmap? = withContext(Dispatchers.IO) {
         try {
             // First pass: inspect image dimensions without loading pixels into memory
@@ -142,7 +144,7 @@ object MediaHelper {
                 Log.w(TAG, "Could not apply EXIF orientation", e)
             }
 
-            // Scale down to maxDimension if still oversized
+            // Scale down to maxDimension preserving exact aspect ratio
             val currentMax = maxOf(decodedBitmap.width, decodedBitmap.height)
             if (currentMax > maxDimension) {
                 val scale = maxDimension.toFloat() / currentMax
@@ -168,13 +170,13 @@ object MediaHelper {
 
     /**
      * Extracts sampled keyframes from a video URI across its duration for real-time
-     * on-device playback, frame inspection, and neural enhancement.
+     * on-device playback, frame inspection, and neural enhancement with true aspect ratio.
      */
     suspend fun extractVideoFrames(
         context: Context,
         uri: Uri,
-        targetFrameCount: Int = 12,
-        maxDimension: Int = 720
+        targetFrameCount: Int = 24,
+        maxDimension: Int = 1080
     ): VideoMetadata? = withContext(Dispatchers.IO) {
         val retriever = MediaMetadataRetriever()
         try {
@@ -185,20 +187,29 @@ object MediaHelper {
 
             val widthStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)
             val heightStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)
-            val origW = widthStr?.toIntOrNull() ?: 1280
-            val origH = heightStr?.toIntOrNull() ?: 720
+            val rawW = widthStr?.toIntOrNull() ?: 1280
+            val rawH = heightStr?.toIntOrNull() ?: 720
 
             val rotationStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)
-            val rotationDegrees = rotationStr?.toFloatOrNull() ?: 0f
+            val rotationDegrees = rotationStr?.toIntOrNull() ?: 0
 
-            // Calculate scaled target dimensions
-            val maxEdge = maxOf(origW, origH)
+            val hasAudioStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_AUDIO)
+            val hasAudio = hasAudioStr != null && (hasAudioStr.equals("yes", ignoreCase = true) || hasAudioStr == "1")
+
+            val isRotated90or270 = rotationDegrees == 90 || rotationDegrees == 270
+            val naturalW = if (isRotated90or270) rawH else rawW
+            val naturalH = if (isRotated90or270) rawW else rawH
+
+            // Calculate scaled target dimensions preserving aspect ratio
+            val maxEdge = maxOf(naturalW, naturalH)
             val scale = if (maxEdge > maxDimension) maxDimension.toFloat() / maxEdge else 1.0f
-            val targetW = (origW * scale).toInt().coerceAtLeast(240)
-            val targetH = (origH * scale).toInt().coerceAtLeast(180)
+            val targetW = (naturalW * scale).toInt().coerceAtLeast(160)
+            val targetH = (naturalH * scale).toInt().coerceAtLeast(160)
 
             val frames = mutableListOf<Bitmap>()
-            val intervalUs = ((durationMs.coerceAtLeast(500L) * 1000L) / targetFrameCount.coerceAtLeast(2))
+            val intervalUs = if (targetFrameCount > 1) {
+                ((durationMs.coerceAtLeast(500L) * 1000L) / (targetFrameCount - 1))
+            } else 1000L
 
             for (i in 0 until targetFrameCount) {
                 val timeUs = (i * intervalUs).coerceIn(0L, (durationMs * 1000L).coerceAtLeast(0L))
@@ -231,8 +242,11 @@ object MediaHelper {
                 }
 
                 if (frameBitmap != null) {
-                    if (rotationDegrees != 0f) {
-                        val matrix = Matrix().apply { postRotate(rotationDegrees) }
+                    // Check if manual rotation is required (API < 27 or if frame was not auto-rotated)
+                    val frameIsLandscape = frameBitmap.width > frameBitmap.height
+                    val naturalIsPortrait = naturalH > naturalW
+                    if (isRotated90or270 && frameIsLandscape && naturalIsPortrait) {
+                        val matrix = Matrix().apply { postRotate(rotationDegrees.toFloat()) }
                         val rotated = Bitmap.createBitmap(
                             frameBitmap, 0, 0,
                             frameBitmap.width, frameBitmap.height,
@@ -247,7 +261,6 @@ object MediaHelper {
                 }
             }
 
-            // If retriever could not extract enough frames (e.g. static/short clip or codec fallback), duplicate / interpolate
             if (frames.isEmpty()) {
                 val singleFrame = retriever.getFrameAtTime()
                 if (singleFrame != null) {
@@ -256,7 +269,6 @@ object MediaHelper {
             }
 
             if (frames.isEmpty()) {
-                // Generate a visual placeholder sequence for preview if raw codec cannot be parsed
                 val placeholder = generateVideoFallbackFrame(targetW, targetH, 0)
                 frames.add(placeholder)
             }
@@ -267,6 +279,7 @@ object MediaHelper {
                 height = frames.first().height,
                 frameCount = frames.size,
                 fps = 30,
+                hasAudio = hasAudio,
                 frames = frames
             )
         } catch (e: Throwable) {
@@ -280,19 +293,55 @@ object MediaHelper {
         }
     }
 
-    private fun generateVideoFallbackFrame(width: Int, height: Int, index: Int): Bitmap {
-        val bitmap = Bitmap.createBitmap(width.coerceAtLeast(360), height.coerceAtLeast(240), Bitmap.Config.ARGB_8888)
+    private val thumbnailCache = androidx.collection.LruCache<String, Bitmap>(20)
+
+    suspend fun extractVideoThumbnail(context: Context, uri: Uri): Bitmap? = withContext(Dispatchers.IO) {
+        val cacheKey = uri.toString()
+        thumbnailCache.get(cacheKey)?.let { return@withContext it }
+
+        val retriever = MediaMetadataRetriever()
+        try {
+            retriever.setDataSource(context, uri)
+            val rotationStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)
+            val rotationDegrees = rotationStr?.toIntOrNull() ?: 0
+
+            var frame = retriever.getFrameAtTime(500000L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                ?: retriever.getFrameAtTime(0L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                ?: retriever.frameAtTime
+
+            if (frame != null && rotationDegrees != 0) {
+                val matrix = Matrix().apply { postRotate(rotationDegrees.toFloat()) }
+                val rotated = Bitmap.createBitmap(frame, 0, 0, frame.width, frame.height, matrix, true)
+                if (rotated != frame) {
+                    frame.recycle()
+                    frame = rotated
+                }
+            }
+
+            if (frame != null) {
+                thumbnailCache.put(cacheKey, frame)
+            }
+            frame
+        } catch (e: Throwable) {
+            Log.w(TAG, "Failed extracting video thumbnail for $uri", e)
+            null
+        } finally {
+            try {
+                retriever.release()
+            } catch (_: Throwable) {
+            }
+        }
+    }
+
+    private fun generateVideoFallbackFrame(w: Int, h: Int, index: Int): Bitmap {
+        val bitmap = Bitmap.createBitmap(w.coerceAtLeast(480), h.coerceAtLeast(360), Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-
-        paint.color = Color.rgb(18, 24, 38)
-        canvas.drawRect(0f, 0f, bitmap.width.toFloat(), bitmap.height.toFloat(), paint)
-
-        paint.color = Color.rgb(14, 165, 233)
+        canvas.drawColor(Color.parseColor("#0D1117"))
+        paint.color = Color.parseColor("#388BFD")
         paint.textSize = 28f
         paint.textAlign = Paint.Align.CENTER
-        canvas.drawText("Video Stream Active • Frame ${index + 1}", bitmap.width / 2f, bitmap.height / 2f, paint)
-
+        canvas.drawText("Video Stream Frame #$index", w / 2f, h / 2f, paint)
         return bitmap
     }
 }

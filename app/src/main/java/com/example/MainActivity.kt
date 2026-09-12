@@ -114,6 +114,10 @@ class MainActivity : ComponentActivity() {
                                         queueItems = queueItems,
                                         selectedTab = uiState.selectedTab,
                                         isDarkTheme = isDarkTheme,
+                                        isProcessing = uiState.isProcessing,
+                                        progressFraction = uiState.progressFraction,
+                                        progressStatusText = uiState.progressStatusText,
+                                        activeStageName = uiState.activeStageName,
                                         onTabSelect = { viewModel.selectTab(it) },
                                         onSampleSelect = { sample ->
                                             viewModel.loadSampleMedia(sample)
@@ -141,6 +145,14 @@ class MainActivity : ComponentActivity() {
                                             }
                                         },
                                         onItemDelete = { viewModel.deleteItem(it) },
+                                        onProcessQueueItem = { entity ->
+                                            viewModel.processQueueItem(entity)
+                                            currentView = if (entity.mediaType == MediaType.PHOTO) {
+                                                CurrentView.PHOTO_EDITOR
+                                            } else {
+                                                CurrentView.VIDEO_EDITOR
+                                            }
+                                        },
                                         onToggleTheme = {
                                             val nextMode = if (isDarkTheme) ThemeMode.LIGHT else ThemeMode.DARK
                                             viewModel.setThemeMode(nextMode)
@@ -238,9 +250,14 @@ class MainActivity : ComponentActivity() {
                             ExportSheet(
                                 isVideo = uiState.isVideoMode,
                                 initialFps = uiState.config.videoFpsTarget,
+                                sourceWidth = uiState.sourceWidth,
+                                sourceHeight = uiState.sourceHeight,
                                 onDismiss = { viewModel.openExportDialog(false) },
-                                onExport = { format, quality, resolution, fps ->
+                                onSaveToGallery = { format, quality, resolution, fps ->
                                     viewModel.saveExport(format, quality, resolution, fps)
+                                },
+                                onShare = { format, quality, resolution, fps ->
+                                    viewModel.shareExport(format, quality, resolution, fps)
                                 }
                             )
                         }
